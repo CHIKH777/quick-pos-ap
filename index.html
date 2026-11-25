@@ -196,7 +196,9 @@
   <div id="tab-pos" class="hidden">
     <div class="card">
       <h2>🛒 إضافة للبيع</h2>
+      <button type="button" class="btn-primary" onclick="scanProductForSale()">📷 التعرف على المنتج بالكاميرا</button>
       <input type="text" id="posSearchInput" placeholder="ابحث بالاسم أو الباركود..." oninput="renderPosProducts()" />
+      <div class="status-msg" id="posStatusMsg"></div>
       <div id="posProductsList"></div>
     </div>
 
@@ -222,6 +224,7 @@
     let cart = [];
     let currentImageData = "";
     let editingProductId = null;
+    let posScanActive = false;
 
     function loadProducts() {
       try {
@@ -245,8 +248,9 @@
       document.getElementById("productsCountBadge").textContent = `${products.length} منتج`;
     }
 
-    function setStatus(msg) {
-      const el = document.getElementById("statusMsg");
+    function setStatus(msg, targetId = "statusMsg") {
+      const el = document.getElementById(targetId);
+      if (!el) return;
       el.textContent = msg;
       if (msg) {
         setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3500);
@@ -267,10 +271,21 @@
     }
 
     function scanWithCamera() {
+      posScanActive = false;
       if (window.AndroidBridge && typeof window.AndroidBridge.startCameraScan === "function") {
         window.AndroidBridge.startCameraScan("product");
       } else {
         setStatus("الكاميرا تعمل عبر تطبيق الأندرويد.");
+      }
+    }
+
+    function scanProductForSale() {
+      posScanActive = true;
+      if (window.AndroidBridge && typeof window.AndroidBridge.startCameraScan === "function") {
+        window.AndroidBridge.startCameraScan("sale");
+      } else {
+        posScanActive = false;
+        setStatus("الكاميرا تعمل عبر تطبيق الأندرويد.", "posStatusMsg");
       }
     }
 
@@ -304,22 +319,61 @@
     };
 
     window.onCameraImageCaptured = function(dataUrl) {
-      if (dataUrl) {
+      if (dataUrl && !posScanActive) {
         setPreviewImage(dataUrl);
       }
     };
 
     window.onNativeScanResult = function(barcode, recognizedText) {
+      const cleanCode = String(barcode || "").trim();
+      const cleanText = String(recognizedText || "").trim();
+
+      if (posScanActive) {
+        posScanActive = false;
+        const lowerCode = cleanCode.toLowerCase();
+        const lowerText = cleanText.toLowerCase();
+        const posSearchEl = document.getElementById("posSearchInput");
+
+        let matchedProduct = null;
+        if (lowerCode) {
+          matchedProduct = products.find(p => String(p.barcode || "").trim().toLowerCase() === lowerCode);
+        }
+        if (!matchedProduct && lowerText) {
+          const words = lowerText.split(/[\s\n\r.,\-_/]+/).filter(w => w.length >= 2);
+          matchedProduct = products.find(p => {
+            const pName = String(p.name || "").toLowerCase();
+            return pName.includes(lowerText) || words.some(w => pName.includes(w));
+          });
+        }
+
+        if (matchedProduct) {
+          addToCart(matchedProduct.id);
+          if (posSearchEl) {
+            posSearchEl.value = matchedProduct.name;
+            renderPosProducts();
+          }
+          setStatus(`تمت إضافة «${matchedProduct.name}» إلى السلة.`, "posStatusMsg");
+        } else {
+          const queryText = cleanCode || cleanText.split(/\r?\n/)[0] || "";
+          if (posSearchEl) {
+            posSearchEl.value = queryText;
+            renderPosProducts();
+          }
+          setStatus("لم يطابق منتجاً محفوظاً، تم وضع النتيجة في البحث.", "posStatusMsg");
+        }
+        return;
+      }
+
       const barcodeEl = document.getElementById("barcodeInput");
       const nameEl = document.getElementById("nameInput");
-      if (barcode) {
-        barcodeEl.value = barcode;
+      if (cleanCode) {
+        barcodeEl.value = cleanCode;
       }
-      if (recognizedText && !nameEl.value.trim()) {
-        const firstLine = recognizedText.split(/\r?\n/).map(s => s.trim()).find(Boolean) || recognizedText.trim();
+      if (cleanText && !nameEl.value.trim()) {
+        const firstLine = cleanText.split(/\r?\n/).map(s => s.trim()).find(Boolean) || cleanText;
         nameEl.value = firstLine;
       }
-      if (barcode || recognizedText) {
+      if (cleanCode || cleanText) {
         setStatus("تم التعرف على البيانات بنجاح.");
       } else {
         setStatus("لم يتم العثور على باركود أو نص واضح.");
