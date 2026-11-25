@@ -35,6 +35,7 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.CAMERA" />
+              <uses-permission android:name="android.permission.INTERNET" />
               <uses-feature android:name="android.hardware.camera" android:required="false" />
               <application
                   android:allowBackup="true"
@@ -61,12 +62,16 @@ jobs:
           import android.content.Intent
           import android.content.pm.PackageManager
           import android.graphics.Bitmap
+          import android.graphics.ImageDecoder
           import android.net.Uri
+          import android.os.Build
           import android.os.Bundle
           import android.provider.MediaStore
+          import android.util.Base64
           import android.webkit.JavascriptInterface
           import android.webkit.ValueCallback
           import android.webkit.WebChromeClient
+          import android.webkit.WebSettings
           import android.webkit.WebView
           import android.webkit.WebViewClient
           import android.widget.Toast
@@ -83,27 +88,58 @@ jobs:
               private lateinit var webView: WebView
               private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
               private var pendingJsonExport: String? = null
+              private var isGalleryImageRequest: Boolean = false
 
               private val cameraLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-                  val bitmap = result.data?.extras?.get("data") as? Bitmap
+                  val extras = result.data?.extras
+                  val bitmap: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                      extras?.getParcelable("data", Bitmap::class.java)
+                  } else {
+                      @Suppress("DEPRECATION")
+                      extras?.get("data") as? Bitmap
+                  }
                   if (bitmap != null) {
+                      notifyImageCaptured(bitmap)
                       processImageWithMlKit(bitmap)
+                  } else {
+                      Toast.makeText(this, "لم يتم التقاط صورة", Toast.LENGTH_SHORT).show()
                   }
               }
 
               private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-                  if (granted) openCamera() else Toast.makeText(this, "يرجى منح إذن الكاميرا", Toast.LENGTH_SHORT).show()
+                  if (granted) {
+                      openCamera()
+                  } else {
+                      Toast.makeText(this, "يرجى منح إذن الكاميرا", Toast.LENGTH_SHORT).show()
+                  }
               }
 
               private val importFileLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                  if (isGalleryImageRequest) {
+                      isGalleryImageRequest = false
+                      if (uri != null) {
+                          handleGalleryUri(uri)
+                      }
+                      return@registerForActivityResult
+                  }
+
                   fileUploadCallback?.onReceiveValue(if (uri != null) arrayOf(uri) else null)
                   fileUploadCallback = null
               }
 
               private val exportFileLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-                  if (uri != null && pendingJsonExport != null) {
-                      contentResolver.openOutputStream(uri)?.use { it.write(pendingJsonExport!!.toByteArray()) }
-                      Toast.makeText(this, "تم حفظ النسخة الاحتياطية بنجاح", Toast.LENGTH_SHORT).show()
+                  val contentToWrite = pendingJsonExport
+                  pendingJsonExport = null
+                  if (uri != null && contentToWrite != null) {
+                      try {
+                          contentResolver.openOutputStream(uri)?.use { stream ->
+                              stream.write(contentToWrite.toByteArray(Charsets.UTF_8))
+                              stream.flush()
+                          }
+                          Toast.makeText(this, "تم حفظ الملف بنجاح", Toast.LENGTH_SHORT).show()
+                      } catch (e: Exception) {
+                          Toast.makeText(this, "تعذر حفظ الملف: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                      }
                   }
               }
 
@@ -117,6 +153,8 @@ jobs:
                       javaScriptEnabled = true
                       domStorageEnabled = true
                       allowFileAccess = true
+                      allowContentAccess = true
+                      mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                   }
                   webView.addJavascriptInterface(WebAppBridge(), "AndroidBridge")
                   webView.webViewClient = WebViewClient()
@@ -126,34 +164,140 @@ jobs:
                           filePathCallback: ValueCallback<Array<Uri>>?,
                           fileChooserParams: FileChooserParams?
                       ): Boolean {
+                          fileUploadCallback?.onReceiveValue(null)
                           fileUploadCallback = filePathCallback
-                          importFileLauncher.launch("application/json")
-                          return true
+
+                          val acceptTypes = fileChooserParams?.acceptTypes
+                              ?.filter { it.isNotBlank() }
+                              ?.joinToString(",")
+                              ?: ""
+
+                          val mimeType = when {
+                              acceptTypes.contains("image") -> "image/*"
+                              acceptTypes.contains("json") -> "application/json"
+                              acceptTypes.isNotBlank() -> acceptTypes
+                              else -> "*/*"
+                          }
+                          isGalleryImageRequest = false
+                          return try {
+                              importFileLauncher.launch(mimeType)
+                              true
+                          } catch (_: Exception) {
+                              fileUploadCallback?.onReceiveValue(null)
+                              fileUploadCallback = null
+                              false
+                          }
                       }
                   }
                   webView.loadUrl("file:///android_asset/index.html")
               }
 
+              private fun uriToBitmap(uri: Uri): Bitmap? {
+                  return try {
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                          val source = ImageDecoder.createSource(contentResolver, uri)
+                          ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                              decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                              decoder.isMutableRequired = true
+                          }
+                      } else {
+                          @Suppress("DEPRECATION")
+                          MediaStore.Images.Media.getBitmap(contentResolver, uri)
+                      }
+                  } catch (_: Exception) {
+                      null
+                  }
+              }
+
+              private fun handleGalleryUri(uri: Uri) {
+                  try {
+                      val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                      if (bytes != null && bytes.isNotEmpty()) {
+                          val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                          val mime = contentResolver.getType(uri) ?: "image/jpeg"
+                          val dataUrl = JSONObject.quote("data:$mime;base64,$base64")
+                          webView.post {
+                              webView.evaluateJavascript(
+                                  "window.onGalleryImageSelected && window.onGalleryImageSelected($dataUrl)",
+                                  null
+                              )
+                          }
+                      }
+                      val bitmap = uriToBitmap(uri)
+                      if (bitmap != null) {
+                          processImageWithMlKit(bitmap)
+                      }
+                  } catch (e: Exception) {
+                      Toast.makeText(this, "تعذر قراءة الصورة من المعرض", Toast.LENGTH_SHORT).show()
+                  }
+              }
+
+              private fun notifyImageCaptured(bitmap: Bitmap) {
+                  try {
+                      val stream = java.io.ByteArrayOutputStream()
+                      bitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
+                      val base64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+                      val dataUrl = JSONObject.quote("data:image/jpeg;base64,$base64")
+                      webView.post {
+                          webView.evaluateJavascript(
+                              "window.onCameraImageCaptured && window.onCameraImageCaptured($dataUrl)",
+                              null
+                          )
+                      }
+                  } catch (_: Exception) {
+                  }
+              }
+
               private fun openCamera() {
-                  val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-                  cameraLauncher.launch(intent)
+                  try {
+                      val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                      cameraLauncher.launch(intent)
+                  } catch (e: Exception) {
+                      Toast.makeText(this, "تعذر فتح الكاميرا", Toast.LENGTH_SHORT).show()
+                  }
               }
 
               private fun processImageWithMlKit(bitmap: Bitmap) {
-                  val image = InputImage.fromBitmap(bitmap, 0)
-                  val barcodeScanner = BarcodeScanning.getClient()
-                  val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                  try {
+                      val image = InputImage.fromBitmap(bitmap, 0)
+                      val barcodeScanner = BarcodeScanning.getClient()
+                      val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
-                  barcodeScanner.process(image).addOnSuccessListener { barcodes ->
-                      val code = barcodes.firstOrNull()?.rawValue ?: ""
-                      textRecognizer.process(image).addOnSuccessListener { visionText ->
-                          val text = visionText.text ?: ""
-                          val safeCode = JSONObject.quote(code)
-                          val safeText = JSONObject.quote(text)
-                          webView.post {
-                              webView.evaluateJavascript("window.onNativeScanResult($safeCode, $safeText)", null)
+                      barcodeScanner.process(image)
+                          .addOnSuccessListener { barcodes ->
+                              val code = barcodes.firstOrNull()?.rawValue ?: ""
+                              textRecognizer.process(image)
+                                  .addOnSuccessListener { visionText ->
+                                      val text = visionText.text ?: ""
+                                      sendScanResultToWeb(code, text)
+                                  }
+                                  .addOnFailureListener {
+                                      sendScanResultToWeb(code, "")
+                                  }
                           }
-                      }
+                          .addOnFailureListener {
+                              textRecognizer.process(image)
+                                  .addOnSuccessListener { visionText ->
+                                      val text = visionText.text ?: ""
+                                      sendScanResultToWeb("", text)
+                                  }
+                                  .addOnFailureListener {
+                                      sendScanResultToWeb("", "")
+                                  }
+                          }
+                  } catch (_: Exception) {
+                      sendScanResultToWeb("", "")
+                  }
+              }
+
+              private fun sendScanResultToWeb(code: String, text: String) {
+                  val safeCode = JSONObject.quote(code)
+                  val safeText = JSONObject.quote(text)
+                  webView.post {
+                      webView.evaluateJavascript(
+                          "window.onNativeScanResult && window.onNativeScanResult($safeCode, $safeText)",
+                          null
+                      )
                   }
               }
 
@@ -170,10 +314,27 @@ jobs:
                   }
 
                   @JavascriptInterface
+                  fun pickImageFromGallery() {
+                      runOnUiThread {
+                          isGalleryImageRequest = true
+                          try {
+                              importFileLauncher.launch("image/*")
+                          } catch (_: Exception) {
+                              isGalleryImageRequest = false
+                              Toast.makeText(this@MainActivity, "تعذر فتح المعرض", Toast.LENGTH_SHORT).show()
+                          }
+                      }
+                  }
+
+                  @JavascriptInterface
                   fun saveJsonFile(jsonContent: String) {
                       pendingJsonExport = jsonContent
                       runOnUiThread {
-                          exportFileLauncher.launch("quickpos_backup.json")
+                          try {
+                              exportFileLauncher.launch("quickpos_backup.json")
+                          } catch (_: Exception) {
+                              Toast.makeText(this@MainActivity, "تعذر فتح نافذة الحفظ", Toast.LENGTH_SHORT).show()
+                          }
                       }
                   }
               }
