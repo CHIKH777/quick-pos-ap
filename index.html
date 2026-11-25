@@ -1,304 +1,35 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Quick POS Pro</title>
-  <style>
-    :root {
-      --bg: #0f172a;
-      --card: #1e293b;
-      --border: #334155;
-      --primary: #10b981;
-      --primary-hover: #059669;
-      --accent: #3b82f6;
-      --danger: #ef4444;
-      --text: #f8fafc;
-      --muted: #94a3b8;
-    }
-    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
-    body { margin: 0; background: var(--bg); color: var(--text); padding-bottom: 80px; }
-    header { background: var(--card); padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; }
-    header h1 { margin: 0; font-size: 18px; font-weight: 700; color: var(--primary); }
-    .container { padding: 14px; max-width: 600px; margin: auto; }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
-    .btn { border: none; border-radius: 10px; padding: 12px 16px; font-size: 15px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; transition: 0.15s; }
-    .btn-primary { background: var(--primary); color: #06281e; }
-    .btn-accent { background: var(--accent); color: #fff; }
-    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
-    .btn-danger { background: var(--danger); color: #fff; width: auto; padding: 6px 10px; font-size: 13px; }
-    .row { display: flex; gap: 8px; margin-bottom: 10px; }
-    input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border); background: #0b1120; color: var(--text); font-size: 15px; }
-    input:focus { outline: none; border-color: var(--primary); }
-    .item-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
-    .item-row:last-child { border-bottom: none; }
-    .badge { background: #0b1120; padding: 4px 8px; border-radius: 6px; font-size: 12px; color: var(--muted); }
-    .total-box { background: #064e3b; border: 1px solid var(--primary); padding: 14px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 700; margin-top: 10px; }
-    nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); display: flex; height: 64px; z-index: 20; }
-    nav button { flex: 1; background: none; border: none; color: var(--muted); font-size: 15px; font-weight: 700; cursor: pointer; }
-    nav button.active { color: var(--primary); border-top: 3px solid var(--primary); background: rgba(16, 185, 129, 0.08); }
-    .hidden { display: none; }
-    #scanStatus { font-size: 13px; color: #38bdf8; margin-top: 6px; min-height: 18px; }
-  </style>
-</head>
-<body>
-
-<header>
-  <h1>⚡ نقطة البيع السريعة</h1>
-  <span class="badge" id="countBadge">0 منتج</span>
-</header>
-
-<div class="container">
-  <div id="tab-sales">
-    <div class="card">
-      <div class="row">
-        <button class="btn btn-accent" onclick="triggerNativeScan('sale')">📷 مسح بالكاميرا (باركود / نص)</button>
-      </div>
-      <input type="text" id="saleSearch" placeholder="ابحث بالاسم أو الباركود..." oninput="renderSaleSuggestions()" />
-      <div id="scanStatus"></div>
-      <div id="saleSuggestions" style="margin-top:8px;"></div>
-    </div>
-
-    <div class="card">
-      <h3 style="margin-top:0;font-size:16px;">🛒 سلة المبيعات الحالية</h3>
-      <div id="cartList"><p style="color:var(--muted);text-align:center;">السلة فارغة</p></div>
-      <div class="total-box">
-        <span>الإجمالي:</span>
-        <span id="cartTotal">0.00</span>
-      </div>
-      <div class="row" style="margin-top:12px;">
-        <button class="btn btn-primary" onclick="completeSale()">✅ إتمام البيع (تصفير السلة)</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="tab-products" class="hidden">
-    <div class="card">
-      <h3 style="margin-top:0;font-size:16px;">➕ إضافة / تعديل منتج</h3>
-      <div class="row">
-        <button class="btn btn-accent" onclick="triggerNativeScan('product')">📷 التقاط اسم المنتج والباركود بالكاميرا</button>
-      </div>
-      <div class="row">
-        <input type="text" id="prodBarcode" placeholder="الباركود (اختياري)" />
-      </div>
-      <div class="row">
-        <input type="text" id="prodName" placeholder="اسم المنتج" />
-      </div>
-      <div class="row">
-        <input type="number" id="prodPrice" placeholder="السعر" step="0.01" />
-      </div>
-      <button class="btn btn-primary" onclick="saveProduct()">💾 حفظ المنتج</button>
-    </div>
-
-    <div class="card">
-      <h3 style="margin-top:0;font-size:16px;">📦 قاعدة بيانات المنتجات</h3>
-      <input type="text" id="prodFilter" placeholder="بحث في المنتجات..." oninput="renderProducts()" style="margin-bottom:10px;" />
-      <div id="productsList"></div>
-    </div>
-
-    <div class="card">
-      <h3 style="margin-top:0;font-size:16px;">🔄 نسخ ونقل البيانات (JSON)</h3>
-      <div class="row">
-        <button class="btn btn-outline" onclick="exportJSON()">📤 تصدير JSON</button>
-        <button class="btn btn-outline" onclick="document.getElementById('importFile').click()">📥 استيراد JSON</button>
-        <input type="file" id="importFile" accept=".json" class="hidden" onchange="importJSON(event)" />
-      </div>
-    </div>
-  </div>
-</div>
-
-<nav>
-  <button id="nav-sales" class="active" onclick="switchTab('sales')">💳 البيع</button>
-  <button id="nav-products" onclick="switchTab('products')">📦 المنتجات</button>
-</nav>
+<button type="button" onclick="pickDeviceImage()" style="width:100%;padding:12px;margin-top:8px;border:none;border-radius:8px;background:#374151;color:#fff;font-weight:bold;cursor:pointer;">
+  🖼️ اختيار صورة من الجهاز
+</button>
 
 <script>
-  let products = JSON.parse(localStorage.getItem('pos_products') || '[]');
-  let cart = [];
-  let scanMode = 'sale';
-
-  function updateStorage() {
-    localStorage.setItem('pos_products', JSON.stringify(products));
-    document.getElementById('countBadge').textContent = products.length + ' منتج';
-  }
-
-  function switchTab(tab) {
-    document.getElementById('tab-sales').classList.toggle('hidden', tab !== 'sales');
-    document.getElementById('tab-products').classList.toggle('hidden', tab !== 'products');
-    document.getElementById('nav-sales').classList.toggle('active', tab === 'sales');
-    document.getElementById('nav-products').classList.toggle('active', tab === 'products');
-    if (tab === 'products') renderProducts();
-  }
-
-  function triggerNativeScan(mode) {
-    scanMode = mode;
-    if (window.AndroidBridge && window.AndroidBridge.startCameraScan) {
-      window.AndroidBridge.startCameraScan(mode);
+  function pickDeviceImage() {
+    if (window.AndroidBridge && typeof window.AndroidBridge.pickImageFromGallery === "function") {
+      window.AndroidBridge.pickImageFromGallery();
     } else {
-      alert('الكاميرا الذكية تعمل داخل تطبيق الأندرويد المثبت.');
+      alert("ميزة اختيار الصورة من الجهاز تعمل داخل تطبيق الأندرويد فقط.");
     }
   }
 
-  window.onNativeScanResult = function(barcode, ocrText) {
-    const cleanBarcode = (barcode || '').trim();
-    const cleanText = (ocrText || '').trim();
-    document.getElementById('scanStatus').textContent =
-      `تم الالتقاط: ${cleanBarcode ? 'باركود [' + cleanBarcode + '] ' : ''}${cleanText ? 'نص [' + cleanText.substring(0, 40) + ']' : ''}`;
-
-    if (scanMode === 'product') {
-      if (cleanBarcode) document.getElementById('prodBarcode').value = cleanBarcode;
-      if (cleanText && !document.getElementById('prodName').value) {
-        document.getElementById('prodName').value = cleanText.split('\n')[0];
-      }
-    } else {
-      let found = null;
-      if (cleanBarcode) {
-        found = products.find(p => p.barcode === cleanBarcode);
-      }
-      if (!found && cleanText) {
-        const lower = cleanText.toLowerCase();
-        found = products.find(p => lower.includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(lower.split('\n')[0]));
-      }
-      if (found) {
-        addToCart(found);
-      } else {
-        document.getElementById('saleSearch').value = cleanBarcode || cleanText.split('\n')[0];
-        renderSaleSuggestions();
-      }
+  window.onNativeScanResult = function(barcode, text) {
+    const barcodeInput = document.querySelector('input[placeholder*="الباركود"], #barcode, [name*="barcode"]');
+    const nameInput = document.querySelector('input[placeholder*="اسم"], #productName, #name, [name*="name"]');
+    if (barcode && barcodeInput) {
+      barcodeInput.value = barcode;
+      barcodeInput.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    if (text && nameInput && !nameInput.value) {
+      const firstLine = text.split("\n").map(s => s.trim()).find(Boolean) || text.trim();
+      nameInput.value = firstLine;
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
     }
   };
 
-  function saveProduct() {
-    const barcode = document.getElementById('prodBarcode').value.trim();
-    const name = document.getElementById('prodName').value.trim();
-    const price = parseFloat(document.getElementById('prodPrice').value);
-    if (!name || isNaN(price)) return alert('يرجى إدخال اسم المنتج والسعر');
-
-    const idx = products.findIndex(p => (barcode && p.barcode === barcode) || p.name === name);
-    if (idx >= 0) {
-      products[idx] = { barcode, name, price };
-    } else {
-      products.push({ barcode, name, price });
+  window.onGalleryImageSelected = function(dataUrl) {
+    const previewImg = document.querySelector("#previewImage, .product-preview");
+    if (previewImg) {
+      previewImg.src = dataUrl;
+      previewImg.style.display = "block";
     }
-    updateStorage();
-    document.getElementById('prodBarcode').value = '';
-    document.getElementById('prodName').value = '';
-    document.getElementById('prodPrice').value = '';
-    renderProducts();
-    alert('تم حفظ المنتج بنجاح');
-  }
-
-  function deleteProduct(index) {
-    products.splice(index, 1);
-    updateStorage();
-    renderProducts();
-  }
-
-  function renderProducts() {
-    const q = document.getElementById('prodFilter').value.toLowerCase();
-    const list = document.getElementById('productsList');
-    const filtered = products.filter(p => p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q)));
-    if (!filtered.length) {
-      list.innerHTML = '<p style="color:var(--muted);text-align:center;">لا توجد منتجات</p>';
-      return;
-    }
-    list.innerHTML = filtered.map((p, i) => `
-      <div class="item-row">
-        <div>
-          <div style="font-weight:700;">${p.name}</div>
-          <div style="font-size:13px;color:var(--muted);">${p.barcode || 'بدون باركود'} • <span style="color:var(--primary);font-weight:700;">${p.price.toFixed(2)}</span></div>
-        </div>
-        <button class="btn btn-danger" onclick="deleteProduct(${i})">حذف</button>
-      </div>
-    `).join('');
-  }
-
-  function renderSaleSuggestions() {
-    const q = document.getElementById('saleSearch').value.trim().toLowerCase();
-    const box = document.getElementById('saleSuggestions');
-    if (!q) { box.innerHTML = ''; return; }
-    const matches = products.filter(p => p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q))).slice(0, 5);
-    box.innerHTML = matches.map(p => `
-      <div class="item-row" style="cursor:pointer;" onclick='addToCart(${JSON.stringify(p)})'>
-        <span>${p.name} <small style="color:var(--muted)">(${p.barcode || ''})</small></span>
-        <strong style="color:var(--primary)">+ ${p.price.toFixed(2)}</strong>
-      </div>
-    `).join('');
-  }
-
-  function addToCart(product) {
-    const existing = cart.find(c => c.name === product.name);
-    if (existing) existing.qty += 1;
-    else cart.push({ ...product, qty: 1 });
-    document.getElementById('saleSearch').value = '';
-    document.getElementById('saleSuggestions').innerHTML = '';
-    renderCart();
-  }
-
-  function renderCart() {
-    const box = document.getElementById('cartList');
-    if (!cart.length) {
-      box.innerHTML = '<p style="color:var(--muted);text-align:center;">السلة فارغة</p>';
-      document.getElementById('cartTotal').textContent = '0.00';
-      return;
-    }
-    let total = 0;
-    box.innerHTML = cart.map((c, idx) => {
-      const sub = c.price * c.qty;
-      total += sub;
-      return `
-        <div class="item-row">
-          <div>
-            <strong>${c.name}</strong>
-            <div style="font-size:13px;color:var(--muted);">${c.qty} × ${c.price.toFixed(2)} = ${sub.toFixed(2)}</div>
-          </div>
-          <button class="btn btn-danger" onclick="cart.splice(${idx},1);renderCart()">✕</button>
-        </div>
-      `;
-    }).join('');
-    document.getElementById('cartTotal').textContent = total.toFixed(2);
-  }
-
-  function completeSale() {
-    if (!cart.length) return;
-    cart = [];
-    renderCart();
-  }
-
-  function exportJSON() {
-    const data = JSON.stringify(products, null, 2);
-    if (window.AndroidBridge && window.AndroidBridge.saveJsonFile) {
-      window.AndroidBridge.saveJsonFile(data);
-    } else {
-      const blob = new Blob([data], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'pos_products_backup.json';
-      a.click();
-    }
-  }
-
-  function importJSON(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      try {
-        const imported = JSON.parse(e.target.result);
-        if (Array.isArray(imported)) {
-          products = imported;
-          updateStorage();
-          renderProducts();
-          alert('تم استيراد المنتجات بنجاح (' + products.length + ')');
-        }
-      } catch (err) {
-        alert('ملف JSON غير صالح');
-      }
-    };
-    reader.readAsText(file);
-  }
-
-  updateStorage();
+  };
 </script>
-</body>
-</html>
