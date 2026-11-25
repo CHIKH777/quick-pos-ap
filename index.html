@@ -1,35 +1,552 @@
-<button type="button" onclick="pickDeviceImage()" style="width:100%;padding:12px;margin-top:8px;border:none;border-radius:8px;background:#374151;color:#fff;font-weight:bold;cursor:pointer;">
-  🖼️ اختيار صورة من الجهاز
-</button>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>نقطة البيع السريعة</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --card-2: #162032;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --primary: #3b82f6;
+      --success: #10b981;
+      --danger: #ef4444;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body {
+      margin: 0;
+      padding: 14px 14px 80px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .header h1 { margin: 0; font-size: 1.2rem; }
+    .badge {
+      background: var(--card);
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .card h2 { margin: 0 0 12px; font-size: 1rem; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row > button { flex: 1; min-width: 140px; }
+    input {
+      width: 100%;
+      padding: 11px 12px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card-2);
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    button {
+      width: 100%;
+      padding: 11px 14px;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--primary); margin-bottom: 8px; }
+    .btn-secondary { background: #334155; margin-bottom: 10px; }
+    .btn-success { background: var(--success); }
+    .btn-danger { background: var(--danger); padding: 6px 10px; width: auto; font-size: 0.8rem; }
+    .btn-edit { background: #f59e0b; color: #0f172a; padding: 6px 10px; width: auto; font-size: 0.8rem; }
+    .preview-box {
+      display: none;
+      margin-bottom: 10px;
+      text-align: center;
+      background: var(--card-2);
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px dashed var(--border);
+    }
+    .preview-box img {
+      max-height: 130px;
+      max-width: 100%;
+      border-radius: 6px;
+      object-fit: contain;
+    }
+    .product-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .product-thumb {
+      width: 46px;
+      height: 46px;
+      border-radius: 6px;
+      object-fit: cover;
+      background: #0f172a;
+      flex-shrink: 0;
+    }
+    .product-info { flex: 1; }
+    .product-title { font-weight: 700; font-size: 0.95rem; }
+    .product-meta { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+    .empty { text-align: center; color: var(--muted); padding: 14px 0; font-size: 0.9rem; }
+    .status-msg {
+      margin-top: 8px;
+      font-size: 0.85rem;
+      color: #34d399;
+      min-height: 18px;
+    }
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      z-index: 20;
+    }
+    .bottom-nav button {
+      border-radius: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 13px;
+    }
+    .bottom-nav button.active {
+      color: var(--text);
+      background: var(--card-2);
+      border-top: 2px solid var(--primary);
+    }
+    .hidden { display: none; }
+    .cart-total {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin: 10px 0;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>⚡ نقطة البيع السريعة</h1>
+    <span class="badge" id="productsCountBadge">0 منتج</span>
+  </div>
 
-<script>
-  function pickDeviceImage() {
-    if (window.AndroidBridge && typeof window.AndroidBridge.pickImageFromGallery === "function") {
-      window.AndroidBridge.pickImageFromGallery();
-    } else {
-      alert("ميزة اختيار الصورة من الجهاز تعمل داخل تطبيق الأندرويد فقط.");
-    }
-  }
+  <!-- تبويب المنتجات -->
+  <div id="tab-products">
+    <div class="card">
+      <h2 id="formTitle">➕ إضافة / تعديل منتج</h2>
 
-  window.onNativeScanResult = function(barcode, text) {
-    const barcodeInput = document.querySelector('input[placeholder*="الباركود"], #barcode, [name*="barcode"]');
-    const nameInput = document.querySelector('input[placeholder*="اسم"], #productName, #name, [name*="name"]');
-    if (barcode && barcodeInput) {
-      barcodeInput.value = barcode;
-      barcodeInput.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-    if (text && nameInput && !nameInput.value) {
-      const firstLine = text.split("\n").map(s => s.trim()).find(Boolean) || text.trim();
-      nameInput.value = firstLine;
-      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-  };
+      <div class="row">
+        <button type="button" class="btn-primary" onclick="scanWithCamera()">📷 التقاط بالكاميرا</button>
+        <button type="button" class="btn-secondary" onclick="chooseImageFromDevice()">🖼️ اختيار صورة من الجهاز</button>
+      </div>
+      <input type="file" id="fallbackImageInput" accept="image/*" class="hidden" onchange="handleFallbackFile(event)" />
 
-  window.onGalleryImageSelected = function(dataUrl) {
-    const previewImg = document.querySelector("#previewImage, .product-preview");
-    if (previewImg) {
-      previewImg.src = dataUrl;
-      previewImg.style.display = "block";
+      <div class="preview-box" id="previewBox">
+        <img id="previewImage" alt="معاينة المنتج" />
+      </div>
+
+      <input type="text" id="barcodeInput" placeholder="الباركود (اختياري)" />
+      <input type="text" id="nameInput" placeholder="اسم المنتج" />
+      <input type="number" id="priceInput" placeholder="السعر" step="any" />
+
+      <button type="button" class="btn-success" onclick="saveProduct()">💾 حفظ المنتج</button>
+      <div class="status-msg" id="statusMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>📦 قاعدة بيانات المنتجات</h2>
+      <input type="text" id="searchInput" placeholder="بحث في المنتجات..." oninput="renderProducts()" />
+      <div id="productsList"></div>
+    </div>
+
+    <div class="card">
+      <h2>🔁 نسخ ونقل البيانات (JSON)</h2>
+      <div class="row">
+        <button type="button" class="btn-secondary" onclick="exportJson()">⬆️ تصدير JSON</button>
+        <button type="button" class="btn-secondary" onclick="triggerImportJson()">⬇️ استيراد JSON</button>
+      </div>
+      <input type="file" id="importJsonInput" accept="application/json,.json" class="hidden" onchange="importJsonFile(event)" />
+    </div>
+  </div>
+
+  <!-- تبويب البيع -->
+  <div id="tab-pos" class="hidden">
+    <div class="card">
+      <h2>🛒 إضافة للبيع</h2>
+      <input type="text" id="posSearchInput" placeholder="ابحث بالاسم أو الباركود..." oninput="renderPosProducts()" />
+      <div id="posProductsList"></div>
+    </div>
+
+    <div class="card">
+      <h2>🧾 سلة البيع</h2>
+      <div id="cartList"></div>
+      <div class="cart-total">
+        <span>الإجمالي:</span>
+        <span id="cartTotalAmount">0</span>
+      </div>
+      <button type="button" class="btn-success" onclick="checkoutCart()">✅ إتمام البيع</button>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <button type="button" id="nav-products" class="active" onclick="switchTab('products')">📦 المنتجات</button>
+    <button type="button" id="nav-pos" onclick="switchTab('pos')">💳 البيع</button>
+  </nav>
+
+  <script>
+    const STORAGE_KEY = "quickpos_products_v1";
+    let products = [];
+    let cart = [];
+    let currentImageData = "";
+    let editingProductId = null;
+
+    function loadProducts() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        products = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(products)) products = [];
+      } catch (_) {
+        products = [];
+      }
+      updateBadge();
+      renderProducts();
+      renderPosProducts();
     }
-  };
-</script>
+
+    function persistProducts() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+      updateBadge();
+    }
+
+    function updateBadge() {
+      document.getElementById("productsCountBadge").textContent = `${products.length} منتج`;
+    }
+
+    function setStatus(msg) {
+      const el = document.getElementById("statusMsg");
+      el.textContent = msg;
+      if (msg) {
+        setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3500);
+      }
+    }
+
+    function setPreviewImage(dataUrl) {
+      currentImageData = dataUrl || "";
+      const box = document.getElementById("previewBox");
+      const img = document.getElementById("previewImage");
+      if (currentImageData) {
+        img.src = currentImageData;
+        box.style.display = "block";
+      } else {
+        img.removeAttribute("src");
+        box.style.display = "none";
+      }
+    }
+
+    function scanWithCamera() {
+      if (window.AndroidBridge && typeof window.AndroidBridge.startCameraScan === "function") {
+        window.AndroidBridge.startCameraScan("product");
+      } else {
+        setStatus("الكاميرا تعمل عبر تطبيق الأندرويد.");
+      }
+    }
+
+    function chooseImageFromDevice() {
+      if (window.AndroidBridge && typeof window.AndroidBridge.pickImageFromGallery === "function") {
+        window.AndroidBridge.pickImageFromGallery();
+      } else {
+        document.getElementById("fallbackImageInput").click();
+      }
+    }
+
+    function handleFallbackFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          setPreviewImage(reader.result);
+          setStatus("تم اختيار الصورة.");
+        }
+      };
+      reader.readAsDataURL(file);
+      event.target.value = "";
+    }
+
+    window.onGalleryImageSelected = function(dataUrl) {
+      if (dataUrl) {
+        setPreviewImage(dataUrl);
+        setStatus("تم اختيار الصورة من الجهاز.");
+      }
+    };
+
+    window.onCameraImageCaptured = function(dataUrl) {
+      if (dataUrl) {
+        setPreviewImage(dataUrl);
+      }
+    };
+
+    window.onNativeScanResult = function(barcode, recognizedText) {
+      const barcodeEl = document.getElementById("barcodeInput");
+      const nameEl = document.getElementById("nameInput");
+      if (barcode) {
+        barcodeEl.value = barcode;
+      }
+      if (recognizedText && !nameEl.value.trim()) {
+        const firstLine = recognizedText.split(/\r?\n/).map(s => s.trim()).find(Boolean) || recognizedText.trim();
+        nameEl.value = firstLine;
+      }
+      if (barcode || recognizedText) {
+        setStatus("تم التعرف على البيانات بنجاح.");
+      } else {
+        setStatus("لم يتم العثور على باركود أو نص واضح.");
+      }
+    };
+
+    function saveProduct() {
+      const barcode = document.getElementById("barcodeInput").value.trim();
+      const name = document.getElementById("nameInput").value.trim();
+      const priceVal = parseFloat(document.getElementById("priceInput").value);
+
+      if (!name) {
+        setStatus("يرجى إدخال اسم المنتج.");
+        return;
+      }
+      const price = Number.isFinite(priceVal) ? priceVal : 0;
+
+      if (editingProductId !== null) {
+        products = products.map(p => p.id === editingProductId ? {
+          ...p,
+          barcode,
+          name,
+          price,
+          image: currentImageData || p.image || ""
+        } : p);
+        editingProductId = null;
+        document.getElementById("formTitle").textContent = "➕ إضافة / تعديل منتج";
+        setStatus("تم تحديث المنتج وحفظه.");
+      } else {
+        products.unshift({
+          id: Date.now().toString(),
+          barcode,
+          name,
+          price,
+          image: currentImageData || ""
+        });
+        setStatus("تم حفظ المنتج بنجاح.");
+      }
+
+      persistProducts();
+      resetForm();
+      renderProducts();
+      renderPosProducts();
+    }
+
+    function resetForm() {
+      editingProductId = null;
+      document.getElementById("formTitle").textContent = "➕ إضافة / تعديل منتج";
+      document.getElementById("barcodeInput").value = "";
+      document.getElementById("nameInput").value = "";
+      document.getElementById("priceInput").value = "";
+      setPreviewImage("");
+    }
+
+    function editProduct(id) {
+      const item = products.find(p => p.id === id);
+      if (!item) return;
+      editingProductId = item.id;
+      document.getElementById("formTitle").textContent = "✏️ تعديل منتج";
+      document.getElementById("barcodeInput").value = item.barcode || "";
+      document.getElementById("nameInput").value = item.name || "";
+      document.getElementById("priceInput").value = item.price ?? "";
+      setPreviewImage(item.image || "");
+      switchTab("products");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function deleteProduct(id) {
+      products = products.filter(p => p.id !== id);
+      persistProducts();
+      renderProducts();
+      renderPosProducts();
+      setStatus("تم حذف المنتج.");
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function renderProducts() {
+      const q = (document.getElementById("searchInput").value || "").trim().toLowerCase();
+      const listEl = document.getElementById("productsList");
+      const filtered = products.filter(p =>
+        (p.name || "").toLowerCase().includes(q) ||
+        (p.barcode || "").toLowerCase().includes(q)
+      );
+
+      if (!filtered.length) {
+        listEl.innerHTML = `<div class="empty">لا توجد منتجات</div>`;
+        return;
+      }
+
+      listEl.innerHTML = filtered.map(p => `
+        <div class="product-item">
+          ${p.image ? `<img class="product-thumb" src="${p.image}" alt="" />` : `<div class="product-thumb"></div>`}
+          <div class="product-info">
+            <div class="product-title">${escapeHtml(p.name)}</div>
+            <div class="product-meta">السعر: ${p.price} ${p.barcode ? `• باركود: ${escapeHtml(p.barcode)}` : ""}</div>
+          </div>
+          <div class="row" style="gap:6px;flex:0;">
+            <button type="button" class="btn-edit" onclick="editProduct('${p.id}')">تعديل</button>
+            <button type="button" class="btn-danger" onclick="deleteProduct('${p.id}')">حذف</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderPosProducts() {
+      const q = (document.getElementById("posSearchInput").value || "").trim().toLowerCase();
+      const listEl = document.getElementById("posProductsList");
+      const filtered = products.filter(p =>
+        (p.name || "").toLowerCase().includes(q) ||
+        (p.barcode || "").toLowerCase().includes(q)
+      );
+
+      if (!filtered.length) {
+        listEl.innerHTML = `<div class="empty">أضف منتجات أولاً من تبويب المنتجات</div>`;
+        return;
+      }
+
+      listEl.innerHTML = filtered.map(p => `
+        <div class="product-item">
+          ${p.image ? `<img class="product-thumb" src="${p.image}" alt="" />` : `<div class="product-thumb"></div>`}
+          <div class="product-info">
+            <div class="product-title">${escapeHtml(p.name)}</div>
+            <div class="product-meta">السعر: ${p.price}</div>
+          </div>
+          <button type="button" class="btn-primary" style="width:auto;margin:0;padding:8px 12px;" onclick="addToCart('${p.id}')">+ إضافة</button>
+        </div>
+      `).join("");
+    }
+
+    function addToCart(id) {
+      const prod = products.find(p => p.id === id);
+      if (!prod) return;
+      const existing = cart.find(c => c.id === id);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        cart.push({ id: prod.id, name: prod.name, price: prod.price, qty: 1 });
+      }
+      renderCart();
+    }
+
+    function renderCart() {
+      const cartEl = document.getElementById("cartList");
+      const totalEl = document.getElementById("cartTotalAmount");
+      if (!cart.length) {
+        cartEl.innerHTML = `<div class="empty">السلة فارغة</div>`;
+        totalEl.textContent = "0";
+        return;
+      }
+      const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+      totalEl.textContent = total.toFixed(2).replace(/\.00$/, "");
+      cartEl.innerHTML = cart.map(item => `
+        <div class="product-item">
+          <div class="product-info">
+            <div class="product-title">${escapeHtml(item.name)} × ${item.qty}</div>
+            <div class="product-meta">المجموع: ${(item.price * item.qty).toFixed(2).replace(/\.00$/, "")}</div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function checkoutCart() {
+      if (!cart.length) return;
+      cart = [];
+      renderCart();
+      alert("تم إتمام عملية البيع بنجاح.");
+    }
+
+    function exportJson() {
+      const jsonStr = JSON.stringify(products, null, 2);
+      if (window.AndroidBridge && typeof window.AndroidBridge.saveJsonFile === "function") {
+        window.AndroidBridge.saveJsonFile(jsonStr);
+      } else {
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "quickpos_backup.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    function triggerImportJson() {
+      document.getElementById("importJsonInput").click();
+    }
+
+    function importJsonFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(String(reader.result || "[]"));
+          if (Array.isArray(parsed)) {
+            products = parsed;
+            persistProducts();
+            renderProducts();
+            renderPosProducts();
+            setStatus("تم استيراد المنتجات بنجاح.");
+          }
+        } catch (_) {
+          setStatus("ملف JSON غير صالح.");
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = "";
+    }
+
+    function switchTab(tab) {
+      const isProducts = tab === "products";
+      document.getElementById("tab-products").classList.toggle("hidden", !isProducts);
+      document.getElementById("tab-pos").classList.toggle("hidden", isProducts);
+      document.getElementById("nav-products").classList.toggle("active", isProducts);
+      document.getElementById("nav-pos").classList.toggle("active", !isProducts);
+      if (!isProducts) renderCart();
+    }
+
+    loadProducts();
+    renderCart();
+  </script>
+</body>
+</html>
